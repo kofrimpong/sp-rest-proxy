@@ -4,6 +4,10 @@
   "version": "3.3.6",
   "main": "./dist/index.js",
   "typings": "./dist/index/RestProxy",
+  "files": [
+    "dist",
+    "static"
+  ],
   "scripts": {
     "serve": "ts-node ./src/server",
     "build": "npm run lint && npx rimraf ./dist && tsc -p .",
@@ -36,8 +40,6 @@
     "cors": "^2.8.5",
     "express": "^4.18.1",
     "node-fetch": "^2.6.7",
-    "node-sp-auth": "^3.0.7",
-    "node-sp-auth-config": "^3.0.5",
     "socket.io": "^4.5.2",
     "socket.io-client": "^4.5.1"
   },
