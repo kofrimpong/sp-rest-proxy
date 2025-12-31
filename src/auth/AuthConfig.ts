@@ -148,7 +148,7 @@ export class AuthConfig {
         const value = await question(`${promptText}: `);
 
         if (value || !field.optional) {
-          if (field.secret && this.settings.encryptPassword && value) {
+          if (field.secret && this.settings.encryptPassword && !this.settings.headlessMode && value) {
             config[field.key] = this.cpass.encode(value);
           } else if (value) {
             config[field.key] = value;
@@ -215,7 +215,7 @@ export class AuthConfig {
       for (const field of authMethod.requiredFields) {
         if (!field.optional && !config[field.key]) {
           const value = await question(field.prompt);
-          if (field.secret && this.settings.encryptPassword && value) {
+          if (field.secret && this.settings.encryptPassword && !this.settings.headlessMode && value) {
             config[field.key] = this.cpass.encode(value);
           } else if (value) {
             config[field.key] = value;
