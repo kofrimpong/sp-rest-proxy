@@ -1,11 +1,10 @@
-import { IAuthOptions } from 'node-sp-auth';
-import { IAuthConfigSettings } from 'node-sp-auth-config';
 import { Router, Request } from 'express';
 import { Agent, Server as HttpsServer } from 'https';
 import { Server as HttpServer } from 'http';
 import { LogLevel } from '../utils/logger';
 import { BasicRouter } from './BasicRouter';
 import { Response } from 'node-fetch';
+import { IAuthConfigSettings, IAuthOptions } from '../auth/IAuthOptions';
 
 export interface IProxySettings {
   hostname?: string;

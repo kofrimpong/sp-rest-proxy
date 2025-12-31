@@ -1,4 +1,3 @@
-import { AuthConfig, IAuthConfigSettings } from 'node-sp-auth-config';
 import * as express from 'express';
 import * as bodyParser from 'body-parser';
 import * as cors from 'cors';
@@ -29,6 +28,8 @@ import {
   IProxyErrorCallback
 } from './interfaces';
 import { RestDeleteRouter } from './routers/restDelete';
+import { IAuthConfigSettings } from '../auth/IAuthOptions';
+import { AuthConfig } from '../auth/AuthConfig';
 
 export default class RestProxy {
 
