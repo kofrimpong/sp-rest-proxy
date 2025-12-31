@@ -4,7 +4,8 @@ import { IProxySettings } from './core/interfaces';
 
 const settings: IProxySettings = {
   configPath: './config/private.json',
-  port: 8080
+  port: 8080,
+  staticRoot: './static',
 };
 
 if (process.env.HTTP_PROXY || process.env.HTTPS_PROXY) {
