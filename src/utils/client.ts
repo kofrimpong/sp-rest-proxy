@@ -1,4 +1,4 @@
-import * as spauth from 'node-sp-auth';
+import * as spauth from '../auth';
 import fetch, { RequestInit, Response, Headers } from 'node-fetch';
 import * as https from 'https';
 import * as http from 'http';
@@ -45,6 +45,7 @@ export class SPClient {
 
   public fetch = async (url: string, init: FetchOptions = {}): Promise<Response> => {
     const auth =  await spauth.getAuth(this.ctx.siteUrl, this.ctx.authOptions);
+
     let digest: string;
     if (init.method === 'POST') {
       try {
@@ -63,7 +64,10 @@ export class SPClient {
         new Headers(digest ? { 'X-RequestDigest': digest } : {}),
       )
     };
-    return fetch(url, opts);
+
+    const response = await fetch(url, opts);
+
+    return response;
   }
 
   public requestDigest = (webUrl: string): Promise<string> => {
