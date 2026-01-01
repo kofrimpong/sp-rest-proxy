@@ -1,9 +1,16 @@
 import {
   bootstrap
 } from 'global-agent';
+import * as http from 'http';
+import * as https from 'https';
 
 export interface IConfiguration {
   requestOptions?: RequestInit;
+}
+
+// Extended RequestInit to support Node.js specific options
+export interface INodeRequestInit extends RequestInit {
+  agent?: http.Agent | https.Agent;
 }
 
 if (process.env['http_proxy'] || process.env['https_proxy']) {
@@ -23,6 +30,21 @@ if (process.env['http_proxy'] || process.env['https_proxy']) {
 let customRequestOptions: RequestInit = {};
 
 export const request = {
+  get: async (url: string, options: RequestInit = {}) => {
+    const response = await fetch(url, {
+      method: 'GET',
+      redirect: 'manual',
+      ...customRequestOptions,
+      ...options
+    });
+
+    // Always return JSON body, even for error responses
+    try {
+      return await response.json();
+    } catch (ex) {
+      throw new Error(`Request failed with status ${response.status}: ${response.statusText}`);
+    }
+  },
   post: async (url: string, options: RequestInit = {}) => {
     const response = await fetch(url, {
       method: 'POST',

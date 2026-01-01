@@ -65,11 +65,8 @@ export class AuthConfig {
       configData = await this.updateConfig(configData);
     }
 
-    // Decrypt password if present
-    const passwordPropertyName = this.getHiddenPropertyName(configData);
-    if (configData[passwordPropertyName]) {
-      configData[passwordPropertyName] = this.cpass.decode(configData[passwordPropertyName]);
-    }
+    // Decrypt all secret fields based on auth method
+    this.decryptSecretFields(configData);
 
     const authContext = this.convertSettingsToAuthContext(configData, this.settings);
     return authContext;
@@ -243,14 +240,25 @@ export class AuthConfig {
     fs.writeFileSync(this.settings.configPath, JSON.stringify(config, null, 2), 'utf8');
   }
 
-  private getHiddenPropertyName = (data: { [key: string]: string; }): string => {
-    if (data.password) {
-      return 'password';
-    }
-    if (data.clientSecret) {
-      return 'clientSecret';
-    }
-    return undefined;
+  private decryptSecretFields = (configData: any): void => {
+    const authMethodId = detectAuthMethod(configData);
+    if (!authMethodId) return;
+
+    const authMethod = getAuthMethod(authMethodId);
+    if (!authMethod) return;
+
+    // Decrypt all fields marked as secret
+    authMethod.requiredFields
+      .filter((field) => field.secret)
+      .forEach((field) => {
+        if (configData[field.key]) {
+          try {
+            configData[field.key] = this.cpass.decode(configData[field.key]);
+          } catch (error) {
+            // If decoding fails, assume it's already decoded or not encrypted
+          }
+        }
+      });
   }
   private getJsonContent = (filePath: string, jsonData?: IAuthOptions): { exists: boolean; jsonRawData: any } => {
     if (typeof jsonData === 'undefined') {
