@@ -10,3 +10,5 @@ export * from './IAuthOptions';
 export * from './IAuthResponse';
 export { setup, IConfiguration } from './config';
 export * from './authResolverRegistry';
+export { registerAuthResolver, IResolverFactory } from './resolvers/AuthResolverFactory';
+export { IAuthResolver } from './resolvers/IAuthResolver';

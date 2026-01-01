@@ -20,10 +20,27 @@ export interface IInteractiveBrowserCredentials extends IBasicOAuthOption {
   authMethod?: 'interactive';
 }
 
+/**
+ * Base interface for custom authentication credentials.
+ * Extend this interface when creating custom auth methods.
+ * @example
+ * ```typescript
+ * interface IMyCertCredentials extends ICustomAuthCredentials {
+ *   certificatePath: string;
+ *   authMethod: 'myCert';
+ * }
+ * ```
+ */
+export interface ICustomAuthCredentials {
+  authMethod: string;
+  [key: string]: any;
+}
+
 export type IAuthOptions =
   | IOnlineAappOnlyCredentials
   | IDeviceCodeCredentials
-  | IInteractiveBrowserCredentials;
+  | IInteractiveBrowserCredentials
+  | ICustomAuthCredentials;
 
 
 export function isDeviceCode(T: IAuthOptions): T is IDeviceCodeCredentials {

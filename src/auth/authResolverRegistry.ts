@@ -63,3 +63,31 @@ export function getAuthMethod(id: string): IAuthMethodConfig | undefined {
 export function detectAuthMethod(config: any): string | undefined {
   return config.authMethod;
 }
+
+/**
+ * Register a custom authentication method
+ * @param method - The auth method configuration to register
+ * @example
+ * ```typescript
+ * import { registerAuthMethod } from 'sp-rest-proxy/dist/auth/authResolverRegistry';
+ *
+ * registerAuthMethod({
+ *   id: 'myCert',
+ *   name: 'Certificate-Based',
+ *   description: 'using X.509 certificate',
+ *   requiredFields: [
+ *     { key: 'clientId', prompt: 'Client ID' },
+ *     { key: 'certificatePath', prompt: 'Certificate Path' }
+ *   ],
+ *   setFlags: (config) => config.authMethod = 'myCert'
+ * });
+ * ```
+ */
+export function registerAuthMethod(method: IAuthMethodConfig): void {
+  const existing = authMethods.find((m) => m.id === method.id);
+  if (existing) {
+    console.warn(`Auth method '${method.id}' is already registered. Skipping.`);
+    return;
+  }
+  authMethods.push(method);
+}
