@@ -21,7 +21,8 @@ export const authMethods: IAuthMethodConfig[] = [
     requiredFields: [
       { key: 'clientId', prompt: 'Client ID' },
       { key: 'tenantId', prompt: 'Tenant ID' },
-      { key: 'redirectUri', prompt: 'Redirect URI (optional)', optional: true }
+      { key: 'clientSecret', prompt: 'Client Secret', secret: true },
+      { key: 'redirectPort', prompt: 'Redirect port (optional)', optional: true }
     ],
     setFlags: (config) => {
       config.authMethod = 'interactive';
@@ -33,7 +34,8 @@ export const authMethods: IAuthMethodConfig[] = [
     description: 'supports MFA',
     requiredFields: [
       { key: 'clientId', prompt: 'Client ID' },
-      { key: 'tenantId', prompt: 'Tenant ID' }
+      { key: 'tenantId', prompt: 'Tenant ID' },
+      { key: 'clientSecret', prompt: 'Client Secret', secret: true, optional: true }
     ],
     setFlags: (config) => {
       config.authMethod = 'deviceCode';

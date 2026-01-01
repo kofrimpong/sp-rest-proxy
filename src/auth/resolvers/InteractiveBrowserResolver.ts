@@ -10,7 +10,7 @@ import { exec } from 'child_process';
 interface IInteractiveBrowserOptions {
   clientId: string;
   tenantId: string;
-  redirectUri?: string; // Default: http://localhost:5000
+  redirectPort?: number | string; // Port on localhost to listen on (default: 5000)
   clientSecret?: string; // Optional: for confidential clients
 }
 
@@ -24,11 +24,12 @@ interface ITokenResponse {
 export class InteractiveBrowserResolver extends OnlineResolver {
 
   private static TokenCache: Cache = new Cache();
-  private readonly redirectUri: string;
+  private readonly port: string;
 
   constructor(_siteUrl: string, private _authOptions: IInteractiveBrowserOptions) {
     super(_siteUrl);
-    this.redirectUri = _authOptions.redirectUri || 'http://localhost:5000';
+    const portVal = typeof _authOptions.redirectPort !== 'undefined' ? String(_authOptions.redirectPort) : '5000';
+    this.port = portVal || '5000';
   }
 
   public getAuth(): Promise<IAuthResponse> {
@@ -69,10 +70,11 @@ export class InteractiveBrowserResolver extends OnlineResolver {
       const tenantDomain = sharePointHostname.split('.sharepoint.com')[0] + '.sharepoint.com';
       const scope = `https://${tenantDomain}/.default offline_access`;
 
+      const builtRedirectUri = `http://localhost:${this.port}`;
       const authUrl = `https://login.microsoftonline.com/${this._authOptions.tenantId}/oauth2/v2.0/authorize?` +
         `client_id=${encodeURIComponent(this._authOptions.clientId)}&` +
         'response_type=code&' +
-        `redirect_uri=${encodeURIComponent(this.redirectUri)}&` +
+        `redirect_uri=${encodeURIComponent(builtRedirectUri)}&` +
         'response_mode=query&' +
         `scope=${encodeURIComponent(scope)}&` +
         `state=${state}&` +
@@ -85,63 +87,59 @@ export class InteractiveBrowserResolver extends OnlineResolver {
 
       // Start local server to receive callback
       const server = http.createServer(async (req, res) => {
-        const url = new URL(req.url!, `http://localhost:${new URL(this.redirectUri).port}`);
+        const url = new URL(req.url!, `http://localhost:${this.port}`);
+        const code = url.searchParams.get('code');
+        const returnedState = url.searchParams.get('state');
+        const error = url.searchParams.get('error');
 
-        if (url.pathname === new URL(this.redirectUri).pathname) {
-          const code = url.searchParams.get('code');
-          const returnedState = url.searchParams.get('state');
-          const error = url.searchParams.get('error');
+        if (error) {
+          res.writeHead(400, { 'Content-Type': 'text/html' });
+          res.end('<html><body><h1>Authentication Failed</h1><p>You can close this window.</p></body></html>');
+          server.close();
+          reject(new Error(`Authentication failed: ${error}`));
+          return;
+        }
 
-          if (error) {
-            res.writeHead(400, { 'Content-Type': 'text/html' });
-            res.end('<html><body><h1>Authentication Failed</h1><p>You can close this window.</p></body></html>');
-            server.close();
-            reject(new Error(`Authentication failed: ${error}`));
-            return;
+        if (!code || returnedState !== state) {
+          res.writeHead(400, { 'Content-Type': 'text/html' });
+          res.end('<html><body><h1>Invalid Response</h1><p>You can close this window.</p></body></html>');
+          server.close();
+          reject(new Error('Invalid authentication response'));
+          return;
+        }
+
+        try {
+          // Exchange code for token
+          const tokenResponse = await this.exchangeCodeForToken(code, codeVerifier);
+
+          // Cache tokens
+          const expirationSeconds = Math.max(tokenResponse.expires_in - 300, 60);
+          InteractiveBrowserResolver.TokenCache.set<string>(cacheKey, tokenResponse.access_token, expirationSeconds);
+
+          if (tokenResponse.refresh_token) {
+            InteractiveBrowserResolver.TokenCache.set<string>(`${cacheKey}:refresh`, tokenResponse.refresh_token, 90 * 24 * 60 * 60);
           }
 
-          if (!code || returnedState !== state) {
-            res.writeHead(400, { 'Content-Type': 'text/html' });
-            res.end('<html><body><h1>Invalid Response</h1><p>You can close this window.</p></body></html>');
-            server.close();
-            reject(new Error('Invalid authentication response'));
-            return;
-          }
+          res.writeHead(200, { 'Content-Type': 'text/html' });
+          res.end('<html><body><h1>Authentication Successful!</h1><p>You can close this window and return to your application.</p></body></html>');
 
-          try {
-            // Exchange code for token
-            const tokenResponse = await this.exchangeCodeForToken(code, codeVerifier);
+          console.log('\n✓ Authentication successful!\n');
 
-            // Cache tokens
-            const expirationSeconds = Math.max(tokenResponse.expires_in - 300, 60);
-            InteractiveBrowserResolver.TokenCache.set<string>(cacheKey, tokenResponse.access_token, expirationSeconds);
-
-            if (tokenResponse.refresh_token) {
-              InteractiveBrowserResolver.TokenCache.set<string>(`${cacheKey}:refresh`, tokenResponse.refresh_token, 90 * 24 * 60 * 60);
+          server.close();
+          resolve({
+            headers: {
+              'Authorization': `Bearer ${tokenResponse.access_token}`
             }
-
-            res.writeHead(200, { 'Content-Type': 'text/html' });
-            res.end('<html><body><h1>Authentication Successful!</h1><p>You can close this window and return to your application.</p></body></html>');
-
-            console.log('\n✓ Authentication successful!\n');
-
-            server.close();
-            resolve({
-              headers: {
-                'Authorization': `Bearer ${tokenResponse.access_token}`
-              }
-            });
-          } catch (err) {
-            res.writeHead(500, { 'Content-Type': 'text/html' });
-            res.end('<html><body><h1>Authentication Error</h1><p>You can close this window.</p></body></html>');
-            server.close();
-            reject(err);
-          }
+          });
+        } catch (err) {
+          res.writeHead(500, { 'Content-Type': 'text/html' });
+          res.end('<html><body><h1>Authentication Error</h1><p>You can close this window.</p></body></html>');
+          server.close();
+          reject(err);
         }
       });
 
-      const port = new URL(this.redirectUri).port || '3000';
-      server.listen(parseInt(port), () => {
+      server.listen(parseInt(this.port, 10), () => {
         this.openBrowser(authUrl);
       });
 
@@ -162,7 +160,8 @@ export class InteractiveBrowserResolver extends OnlineResolver {
     params.append('grant_type', 'authorization_code');
     params.append('client_id', this._authOptions.clientId);
     params.append('code', code);
-    params.append('redirect_uri', this.redirectUri);
+    const builtRedirectUri = `http://localhost:${this.port}`;
+    params.append('redirect_uri', builtRedirectUri);
     params.append('code_verifier', codeVerifier);
     params.append('scope', `https://${tenantDomain}/.default offline_access`);
 
