@@ -71,7 +71,8 @@ export class InteractiveBrowserResolver extends OnlineResolver {
       const scope = `https://${tenantDomain}/.default offline_access`;
 
       const builtRedirectUri = `http://localhost:${this.port}`;
-      const authUrl = `https://login.microsoftonline.com/${this._authOptions.tenantId}/oauth2/v2.0/authorize?` +
+      const authEndpoint = this.getAuthEndpoint();
+      const authUrl = `https://${authEndpoint}/${this._authOptions.tenantId}/oauth2/v2.0/authorize?` +
         `client_id=${encodeURIComponent(this._authOptions.clientId)}&` +
         'response_type=code&' +
         `redirect_uri=${encodeURIComponent(builtRedirectUri)}&` +
@@ -152,7 +153,8 @@ export class InteractiveBrowserResolver extends OnlineResolver {
   }
 
   private async exchangeCodeForToken(code: string, codeVerifier: string): Promise<ITokenResponse> {
-    const tokenUrl = `https://login.microsoftonline.com/${this._authOptions.tenantId}/oauth2/v2.0/token`;
+    const authEndpoint = this.getAuthEndpoint();
+    const tokenUrl = `https://${authEndpoint}/${this._authOptions.tenantId}/oauth2/v2.0/token`;
     const sharePointHostname = new URL(this._siteUrl).hostname;
     const tenantDomain = sharePointHostname.split('.sharepoint.com')[0] + '.sharepoint.com';
 
@@ -185,7 +187,8 @@ export class InteractiveBrowserResolver extends OnlineResolver {
   }
 
   private refreshAccessToken(refreshToken: string, cacheKey: string): Promise<IAuthResponse> {
-    const tokenUrl = `https://login.microsoftonline.com/${this._authOptions.tenantId}/oauth2/v2.0/token`;
+    const authEndpoint = this.getAuthEndpoint();
+    const tokenUrl = `https://${authEndpoint}/${this._authOptions.tenantId}/oauth2/v2.0/token`;
     const sharePointHostname = new URL(this._siteUrl).hostname;
     const tenantDomain = sharePointHostname.split('.sharepoint.com')[0] + '.sharepoint.com';
 

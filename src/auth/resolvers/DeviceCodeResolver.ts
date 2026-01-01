@@ -62,7 +62,8 @@ export class DeviceCodeResolver extends OnlineResolver {
 
   private initiateDeviceCodeFlow(cacheKey: string): Promise<IAuthResponse> {
     const sharePointHostname = new URL(this._siteUrl).hostname;
-    const tokenUrl = `https://login.microsoftonline.com/${this._authOptions.tenantId}/oauth2/v2.0/devicecode`;
+    const authEndpoint = this.getAuthEndpoint();
+    const tokenUrl = `https://${authEndpoint}/${this._authOptions.tenantId}/oauth2/v2.0/devicecode`;
 
     const params = new URLSearchParams();
     params.append('client_id', this._authOptions.clientId);
@@ -89,7 +90,8 @@ export class DeviceCodeResolver extends OnlineResolver {
   }
 
   private pollForToken(deviceCodeResponse: IDeviceCodeResponse, cacheKey: string): Promise<IAuthResponse> {
-    const tokenUrl = `https://login.microsoftonline.com/${this._authOptions.tenantId}/oauth2/v2.0/token`;
+    const authEndpoint = this.getAuthEndpoint();
+    const tokenUrl = `https://${authEndpoint}/${this._authOptions.tenantId}/oauth2/v2.0/token`;
     const interval = (deviceCodeResponse.interval || 5) * 1000;
     const expiresAt = Date.now() + (deviceCodeResponse.expires_in * 1000);
 
@@ -153,7 +155,8 @@ export class DeviceCodeResolver extends OnlineResolver {
   }
 
   private refreshAccessToken(refreshToken: string, cacheKey: string): Promise<IAuthResponse> {
-    const tokenUrl = `https://login.microsoftonline.com/${this._authOptions.tenantId}/oauth2/v2.0/token`;
+    const authEndpoint = this.getAuthEndpoint();
+    const tokenUrl = `https://${authEndpoint}/${this._authOptions.tenantId}/oauth2/v2.0/token`;
     const sharePointHostname = new URL(this._siteUrl).hostname;
 
     const params = new URLSearchParams();
