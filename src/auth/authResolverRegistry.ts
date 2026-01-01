@@ -43,12 +43,13 @@ export const authMethods: IAuthMethodConfig[] = [
   },
   {
     id: 'appOnly',
-    name: 'App-Only',
-    description: 'client credentials',
+    name: 'App-Only (Certificate)',
+    description: 'certificate-based authentication',
     requiredFields: [
       { key: 'clientId', prompt: 'Client ID' },
       { key: 'tenantId', prompt: 'Tenant ID' },
-      { key: 'clientSecret', prompt: 'Client Secret', secret: true }
+      { key: 'certificatePath', prompt: 'Certificate Path (.pfx file)' },
+      { key: 'certificatePassword', prompt: 'Certificate Password', secret: true, optional: true }
     ],
     setFlags: (config) => {
       config.authMethod = 'appOnly';

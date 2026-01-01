@@ -4,6 +4,8 @@ import { OnlineResolver } from './OnlineResolver';
 import { Cache } from '../utils/Cache';
 import { request } from '../config';
 import { HostingEnvironment } from '../HostingEnvironment';
+import * as crypto from 'crypto';
+import * as fs from 'fs';
 
 interface ITokenResponse {
   access_token: string;
@@ -11,6 +13,7 @@ interface ITokenResponse {
 }
 
 
+//https://github.com/LucasMarangon/Azure_Oauth_JWT/tree/main
 export class OnlineAppOnlyCredentials extends OnlineResolver {
 
   private static TokenCache: Cache = new Cache();
@@ -21,7 +24,7 @@ export class OnlineAppOnlyCredentials extends OnlineResolver {
 
   public getAuth(): Promise<IAuthResponse> {
     const sharepointhostname: string = new URL(this._siteUrl).hostname;
-    const cacheKey = `${sharepointhostname}@${this._authOptions.clientSecret}@${this._authOptions.clientId}`;
+    const cacheKey = `${sharepointhostname}@${this._authOptions.certificatePath}@${this._authOptions.clientId}`;
     const cachedToken: string = OnlineAppOnlyCredentials.TokenCache.get<string>(cacheKey);
 
     if (cachedToken) {
@@ -31,7 +34,7 @@ export class OnlineAppOnlyCredentials extends OnlineResolver {
         }
       });
     }
-    return this.getAppOnlyAccessToken(this._authOptions.clientId, this._authOptions.clientSecret, this._authOptions.tenantId)
+    return this.getAppOnlyAccessToken(this._authOptions.clientId, this._authOptions.certificatePath, this._authOptions.certificatePassword, this._authOptions.tenantId)
       .then((tokenResponse: ITokenResponse) => {
         // cache token using expires_in from response (subtract 5 minutes for safety)
         const expirationSeconds = Math.max(tokenResponse.expires_in - 300, 60);
@@ -47,34 +50,127 @@ export class OnlineAppOnlyCredentials extends OnlineResolver {
       })
   }
 
-  private getAppOnlyAccessToken(clientId: string, clientSecret: string, tenantId: string): Promise<ITokenResponse> {
-    return this.getAppOnlyAccessTokenWithResource(clientId, clientSecret, tenantId);
+  private getAppOnlyAccessToken(clientId: string, certificatePath: string, certificatePassword: string | undefined, tenantId: string): Promise<ITokenResponse> {
+    return this.getAppOnlyAccessTokenWithCertificate(clientId, certificatePath, certificatePassword, tenantId);
   }
 
-  private getAppOnlyAccessTokenWithResource(clientId: string, clientSecret: string, tenantId: string): Promise<ITokenResponse> {
-    // Use Azure AD app-only authentication (Microsoft identity platform)
-    const tokenUrl = `https://login.microsoftonline.com/${tenantId}/oauth2/v2.0/token`;
+  private getAppOnlyAccessTokenWithCertificate(clientId: string, certificatePath: string, certificatePassword: string | undefined, tenantId: string): Promise<ITokenResponse> {
+    // Use Azure AD app-only authentication with certificate (Microsoft identity platform)
+    // This follows the JWT bearer token flow required by SharePoint Online
+    const authEndpoint = this.getAuthEndpoint();
+    const tokenUrl = `https://${authEndpoint}/${tenantId}/oauth2/v2.0/token`;
     const sharePointHostname = new URL(this._siteUrl).hostname;
-    const params: URLSearchParams = new URLSearchParams();
-    params.append('grant_type', 'client_credentials');
-    params.append('client_id', clientId);
-    params.append('client_secret', clientSecret);
-    params.append('scope', `https://${sharePointHostname}/.default`);
-    return request.post(tokenUrl, {
-      body: params.toString(),
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded'
-      }
-    }).then((response: any) => {
-      if (response && response.access_token) {
-        return {
-          access_token: response.access_token,
-          expires_in: response.expires_in || 3599 // default to ~1 hour if not provided
-        };
-      } else {
-        return Promise.reject('No access token in response');
-      }
-    });
+
+    try {
+      // Load certificate from PFX file
+      const pfxBuffer = fs.readFileSync(certificatePath);
+
+      // Extract private key for signing
+      // Note: PFX/PKCS#12 format - pass buffer directly with passphrase if provided
+      const privateKey = certificatePassword
+        ? crypto.createPrivateKey({
+          key: pfxBuffer,
+          format: 'pem' as any, // Type workaround for PFX
+          passphrase: certificatePassword
+        })
+        : crypto.createPrivateKey(pfxBuffer);
+
+      // Calculate x5t (certificate thumbprint) from the PFX
+      const certThumbprint = this.getCertificateThumbprint(pfxBuffer, certificatePassword);
+
+      // Create JWT
+      const jwt = this.createClientAssertion(clientId, tenantId, privateKey, certThumbprint);
+
+      // Exchange JWT for access token
+      const params: URLSearchParams = new URLSearchParams();
+      params.append('grant_type', 'client_credentials');
+      params.append('client_id', clientId);
+      params.append('client_assertion_type', 'urn:ietf:params:oauth:client-assertion-type:jwt-bearer');
+      params.append('client_assertion', jwt);
+      params.append('scope', `https://${sharePointHostname}/.default`);
+
+      return request.post(tokenUrl, {
+        body: params.toString(),
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded'
+        }
+      }).then((response: { access_token?: string; expires_in?: number }) => {
+        if (response && response.access_token) {
+          return {
+            access_token: response.access_token,
+            expires_in: response.expires_in || 3599
+          };
+        } else {
+          return Promise.reject('No access token in response');
+        }
+      });
+    } catch (error) {
+      return Promise.reject(`Error loading certificate or creating JWT: ${error}`);
+    }
+  }
+
+  private getCertificateThumbprint(pfxBuffer: Buffer, password?: string): string {
+    // Extract certificate from PFX and compute SHA-1 thumbprint
+    // For PFX, we compute from the buffer as Node.js doesn't expose cert extraction easily
+    try {
+      const privateKeyObj = password
+        ? crypto.createPrivateKey({ key: pfxBuffer, format: 'pem' as any, passphrase: password })
+        : crypto.createPrivateKey(pfxBuffer);
+
+      // The fingerprint is typically computed from the DER-encoded certificate
+      // For PFX, we need to extract the public certificate portion
+      const publicKey = crypto.createPublicKey(privateKeyObj);
+      const publicKeyDer = publicKey.export({ type: 'spki', format: 'der' }) as Buffer;
+
+      const hash = crypto.createHash('sha1').update(publicKeyDer as any).digest();
+      return hash.toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
+    } catch (error) {
+      // Fallback: compute hash from buffer (less accurate but may work)
+      const hash = crypto.createHash('sha1').update(pfxBuffer as any).digest();
+      return hash.toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
+    }
+  }
+
+  private createClientAssertion(clientId: string, tenantId: string, privateKey: crypto.KeyObject, certThumbprint: string): string {
+    const now = Math.floor(Date.now() / 1000);
+    const authEndpoint = this.getAuthEndpoint();
+    const audience = `https://${authEndpoint}/${tenantId}/v2.0`;
+
+
+    // Create header
+    const header = {
+      alg: 'RS256',
+      typ: 'JWT',
+      x5t: certThumbprint
+    };
+
+    // Create payload
+    const payload = {
+      aud: audience,
+      exp: now + 3600, // 1 hour expiry
+      iss: clientId,
+      sub: clientId,
+      jti: crypto.randomUUID(),
+      nbf: now - 300 // Not before: 5 minutes ago for clock skew
+    };
+
+    // Encode header and payload
+    const headerEncoded = this.base64UrlEncode(JSON.stringify(header));
+    const payloadEncoded = this.base64UrlEncode(JSON.stringify(payload));
+    const unsignedToken = `${headerEncoded}.${payloadEncoded}`;
+
+    // Sign the token
+    const signature = crypto.sign('RSA-SHA256', Buffer.from(unsignedToken) as any, privateKey);
+    const signatureEncoded = signature.toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
+    return `${unsignedToken}.${signatureEncoded}`;
+  }
+
+  private base64UrlEncode(str: string): string {
+    return Buffer.from(str)
+      .toString('base64')
+      .replace(/\+/g, '-')
+      .replace(/\//g, '_')
+      .replace(/=/g, '');
   }
 
   protected InitEndpointsMappings(): void {
@@ -85,8 +181,4 @@ export class OnlineAppOnlyCredentials extends OnlineResolver {
     this.endpointsMappings.set(HostingEnvironment.USGovernment, 'login.microsoftonline.us');
   }
 
-}
-
-function err(reason: any): IAuthResponse | PromiseLike<IAuthResponse> {
-  throw new Error('Function not implemented.');
 }

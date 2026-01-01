@@ -5,7 +5,8 @@ export interface IBasicOAuthOption {
 }
 
 export interface IOnlineAappOnlyCredentials extends IBasicOAuthOption {
-  clientSecret: string;
+  certificatePath: string;
+  certificatePassword?: string;
   authMethod?: 'appOnly';
 }
 
