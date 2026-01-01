@@ -16,4 +16,8 @@ export abstract class OnlineResolver implements IAuthResolver {
 
   public abstract getAuth(): Promise<IAuthResponse>;
   protected abstract InitEndpointsMappings(): void;
+
+  protected getAuthEndpoint(): string {
+    return this.endpointsMappings.get(this.hostingEnvironment) || 'login.microsoftonline.com';
+  }
 }
