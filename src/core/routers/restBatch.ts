@@ -34,13 +34,32 @@ export class RestBatchRouter extends BasicRouter {
     } else {
       const regExp = new RegExp('^(POST|GET|MERGE|DELETE) https?://localhost(:[0-9]+)?/', 'i');
       const origin = this.ctx.siteUrl.split('/').splice(0, 3).join('/');
+      const siteUrlPath = this.ctx.siteUrl.split('/').splice(3).join('/');
       body = body.split('\n').map((line) => {
         if (regExp.test(line)) {
           const parts = line.split(' ');
           const method = parts.shift();
           const version = parts.pop();
           let endpoint = parts.join(' ');
-          endpoint = `${origin}/${endpoint.split('/').splice(3).join('/')}`;
+          const urlPath = endpoint.split('/').splice(3).join('/');
+
+          // Apply same path transformation logic as apiEndpoint
+          let transformedPath = urlPath;
+          if (!this.settings.strictRelativeUrls && siteUrlPath) {
+            const baseUrlArr = siteUrlPath.split('/');
+            const reqUrlArr = urlPath.split('?')[0].split('/');
+            const len = baseUrlArr.length > reqUrlArr.length ? reqUrlArr.length : baseUrlArr.length;
+            let similarity = 0;
+            for (let i = 0; i < len; i += 1) {
+              similarity += baseUrlArr[i] === reqUrlArr[i] ? 1 : 0;
+            }
+            // If URL doesn't contain site path, prepend it
+            if (similarity < 2) {
+              transformedPath = (`${siteUrlPath}/${urlPath}`).replace(/\/\//g, '/');
+            }
+          }
+
+          endpoint = `${origin}/${transformedPath}`;
           line = `${method} ${endpoint} ${version}`;
         }
         return line;
