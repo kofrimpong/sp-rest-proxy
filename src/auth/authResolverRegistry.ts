@@ -43,16 +43,47 @@ export const authMethods: IAuthMethodConfig[] = [
   },
   {
     id: 'appOnly',
-    name: 'App-Only (Certificate)',
+    name: 'Online App-Only (Certificate)',
     description: 'certificate-based authentication',
     requiredFields: [
       { key: 'clientId', prompt: 'Client ID' },
       { key: 'tenantId', prompt: 'Tenant ID' },
-      { key: 'certificatePath', prompt: 'Certificate Path (.pfx file)' },
+      { key: 'pfxCertificatePath', prompt: 'Certificate Path (.pfx file)' },
+      { key: 'shaThumbprint', prompt: 'SHA Thumbprint'},
       { key: 'certificatePassword', prompt: 'Certificate Password', secret: true, optional: true }
     ],
     setFlags: (config) => {
       config.authMethod = 'appOnly';
+    }
+  },
+  {
+    id: 'onPremiseAddin',
+    name: 'On-Premise Add-in Only',
+    description: 'using SharePoint Add-in credentials',
+    requiredFields: [
+      { key: 'clientId', prompt: 'Client ID' },
+      { key: 'realm', prompt: 'Realm' },
+      { key: 'issuerId', prompt: 'Issuer ID' },
+      { key: 'rsaPrivateKeyPath', prompt: 'RSA Private Key Path' },
+      { key: 'shaThumbprint', prompt: 'SHA Thumbprint' }
+    ],
+    setFlags: (config) => {
+      config.authMethod = 'onPremiseAddin';
+    }
+  },
+  {
+    id: 'onPremiseUserCredentials',
+    name: 'On-Premise User Credentials',
+    description: 'using Windows user credentials',
+    requiredFields: [
+      { key: 'username', prompt: 'Username' },
+      { key: 'password', prompt: 'Password', secret: true },
+      { key: 'domain', prompt: 'Domain', optional: true },
+      { key: 'workstation', prompt: 'Workstation', optional: true },
+      { key: 'rejectUnauthorized', prompt: 'Reject Unauthorized SSL (true/false)', optional: true }
+    ],
+    setFlags: (config) => {
+      config.authMethod = 'onPremiseUserCredentials';
     }
   }
 ];

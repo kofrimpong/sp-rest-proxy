@@ -4,6 +4,8 @@ import { FileConfig } from './FileConfig';
 import { OnlineAppOnlyCredentials } from './OnlineAppOnlyCredentials';
 import { DeviceCodeResolver } from './DeviceCodeResolver';
 import { InteractiveBrowserResolver } from './InteractiveBrowserResolver';
+import { OnpremiseAddinOnly } from './OnpremiseAddinOnly';
+import { OnpremiseUserCredentials } from './OnpremiseUserCredentials';
 
 /**
  * Type for custom resolver factory function
@@ -63,6 +65,15 @@ export class AuthResolverFactory {
     // App-only flow
     if (authOptions.isAppOnlyOnline(options)) {
       return new OnlineAppOnlyCredentials(siteUrl, options);
+    }
+
+    // On-premise add-in only flow
+    if (authOptions.isOnPremiseAddinOnly(options)) {
+      return new OnpremiseAddinOnly(siteUrl, options);
+    }
+    // On-premise user credentials flow
+    if (authOptions.isOnpremiseUserCredentials(options)) {
+      return new OnpremiseUserCredentials(siteUrl, options as authOptions.IOnpremiseUserCredentials);
     }
 
     throw new Error('Error while resolving authentication class');
