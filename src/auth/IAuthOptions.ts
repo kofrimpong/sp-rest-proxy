@@ -1,24 +1,45 @@
+export interface IBasicAuthOption {
+  authMethod: string;
+}
 
-export interface IBasicOAuthOption {
+export interface IBasicOAuthOption extends IBasicAuthOption{
   clientId: string;
-  tenantId: string;
 }
 
 export interface IOnlineAappOnlyCredentials extends IBasicOAuthOption {
-  certificatePath: string;
+  tenantId: string;
+  pfxCertificatePath: string;
   certificatePassword?: string;
-  authMethod?: 'appOnly';
+  shaThumbprint: string; // Optional: x5t (SHA-1 thumbprint) - will be calculated if not provided
+  authMethod: 'appOnly';
 }
 
 export interface IDeviceCodeCredentials extends IBasicOAuthOption {
+  tenantId: string;
   clientSecret?: string; // Optional: for confidential clients
-  authMethod?: 'deviceCode';
+  authMethod: 'deviceCode';
 }
 
 export interface IInteractiveBrowserCredentials extends IBasicOAuthOption {
+  tenantId: string;
   redirectPort?: number | string; // Port on localhost to listen on (default: 5000)
   clientSecret: string;
-  authMethod?: 'interactive';
+  authMethod: 'interactive';
+}
+
+export interface IOnPremiseAddinCredentials extends IBasicOAuthOption {
+  realm: string;
+  issuerId: string;
+  rsaPrivateKeyPath: string;
+  shaThumbprint: string;
+  authMethod: 'onPremiseAddin';
+}
+
+export interface IOnpremiseUserCredentials  extends IBasicAuthOption {
+  domain?: string;
+  workstation?: string;
+  rejectUnauthorized?: boolean;
+  authMethod: 'onPremiseUserCredentials';
 }
 
 /**
@@ -32,8 +53,7 @@ export interface IInteractiveBrowserCredentials extends IBasicOAuthOption {
  * }
  * ```
  */
-export interface ICustomAuthCredentials {
-  authMethod: string;
+export interface ICustomAuthCredentials extends IBasicAuthOption {
   [key: string]: any;
 }
 
@@ -41,6 +61,8 @@ export type IAuthOptions =
   | IOnlineAappOnlyCredentials
   | IDeviceCodeCredentials
   | IInteractiveBrowserCredentials
+  | IOnPremiseAddinCredentials
+  | IOnpremiseUserCredentials
   | ICustomAuthCredentials;
 
 
@@ -59,6 +81,15 @@ export function isAppOnlyOnline(T: IAuthOptions): T is IOnlineAappOnlyCredential
   return opts.authMethod === 'appOnly';
 }
 
+export function isOnPremiseAddinOnly(T: IAuthOptions): T is IOnPremiseAddinCredentials {
+  const opts = T as IOnPremiseAddinCredentials;
+  return opts.authMethod === 'onPremiseAddin';
+}
+
+export function isOnpremiseUserCredentials(T: IAuthOptions): T is IOnpremiseUserCredentials {
+  const opts = T as IOnpremiseUserCredentials;
+  return opts.authMethod === 'onPremiseUserCredentials';
+}
 
 export interface IAuthContext {
   siteUrl: string;
