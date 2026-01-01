@@ -6,6 +6,7 @@ import { request } from '../config';
 import { HostingEnvironment } from '../HostingEnvironment';
 import * as crypto from 'crypto';
 import * as fs from 'fs';
+import * as jwt from 'jsonwebtoken';
 
 interface ITokenResponse {
   access_token: string;
@@ -24,7 +25,7 @@ export class OnlineAppOnlyCredentials extends OnlineResolver {
 
   public getAuth(): Promise<IAuthResponse> {
     const sharepointhostname: string = new URL(this._siteUrl).hostname;
-    const cacheKey = `${sharepointhostname}@${this._authOptions.certificatePath}@${this._authOptions.clientId}`;
+    const cacheKey = `${sharepointhostname}@${this._authOptions.pfxCertificatePath}@${this._authOptions.clientId}`;
     const cachedToken: string = OnlineAppOnlyCredentials.TokenCache.get<string>(cacheKey);
 
     if (cachedToken) {
@@ -34,7 +35,7 @@ export class OnlineAppOnlyCredentials extends OnlineResolver {
         }
       });
     }
-    return this.getAppOnlyAccessToken(this._authOptions.clientId, this._authOptions.certificatePath, this._authOptions.certificatePassword, this._authOptions.tenantId)
+    return this.getAppOnlyAccessToken(this._authOptions.clientId, this._authOptions.pfxCertificatePath, this._authOptions.certificatePassword, this._authOptions.tenantId)
       .then((tokenResponse: ITokenResponse) => {
         // cache token using expires_in from response (subtract 5 minutes for safety)
         const expirationSeconds = Math.max(tokenResponse.expires_in - 300, 60);
@@ -75,18 +76,15 @@ export class OnlineAppOnlyCredentials extends OnlineResolver {
         })
         : crypto.createPrivateKey(pfxBuffer);
 
-      // Calculate x5t (certificate thumbprint) from the PFX
-      const certThumbprint = this.getCertificateThumbprint(pfxBuffer, certificatePassword);
-
-      // Create JWT
-      const jwt = this.createClientAssertion(clientId, tenantId, privateKey, certThumbprint);
+      // Create JWT using jsonwebtoken library
+      const jwtToken = this.createClientAssertion(clientId, tenantId, privateKey, this._authOptions.shaThumbprint);
 
       // Exchange JWT for access token
       const params: URLSearchParams = new URLSearchParams();
       params.append('grant_type', 'client_credentials');
       params.append('client_id', clientId);
       params.append('client_assertion_type', 'urn:ietf:params:oauth:client-assertion-type:jwt-bearer');
-      params.append('client_assertion', jwt);
+      params.append('client_assertion', jwtToken);
       params.append('scope', `https://${sharePointHostname}/.default`);
 
       return request.post(tokenUrl, {
@@ -109,42 +107,20 @@ export class OnlineAppOnlyCredentials extends OnlineResolver {
     }
   }
 
-  private getCertificateThumbprint(pfxBuffer: Buffer, password?: string): string {
-    // Extract certificate from PFX and compute SHA-1 thumbprint
-    // For PFX, we compute from the buffer as Node.js doesn't expose cert extraction easily
-    try {
-      const privateKeyObj = password
-        ? crypto.createPrivateKey({ key: pfxBuffer, format: 'pem' as any, passphrase: password })
-        : crypto.createPrivateKey(pfxBuffer);
-
-      // The fingerprint is typically computed from the DER-encoded certificate
-      // For PFX, we need to extract the public certificate portion
-      const publicKey = crypto.createPublicKey(privateKeyObj);
-      const publicKeyDer = publicKey.export({ type: 'spki', format: 'der' }) as Buffer;
-
-      const hash = crypto.createHash('sha1').update(publicKeyDer as any).digest();
-      return hash.toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
-    } catch (error) {
-      // Fallback: compute hash from buffer (less accurate but may work)
-      const hash = crypto.createHash('sha1').update(pfxBuffer as any).digest();
-      return hash.toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
-    }
-  }
 
   private createClientAssertion(clientId: string, tenantId: string, privateKey: crypto.KeyObject, certThumbprint: string): string {
     const now = Math.floor(Date.now() / 1000);
     const authEndpoint = this.getAuthEndpoint();
     const audience = `https://${authEndpoint}/${tenantId}/v2.0`;
 
-
-    // Create header
+    // JWT header with certificate thumbprint
     const header = {
       alg: 'RS256',
       typ: 'JWT',
       x5t: certThumbprint
     };
 
-    // Create payload
+    // JWT payload
     const payload = {
       aud: audience,
       exp: now + 3600, // 1 hour expiry
@@ -154,23 +130,13 @@ export class OnlineAppOnlyCredentials extends OnlineResolver {
       nbf: now - 300 // Not before: 5 minutes ago for clock skew
     };
 
-    // Encode header and payload
-    const headerEncoded = this.base64UrlEncode(JSON.stringify(header));
-    const payloadEncoded = this.base64UrlEncode(JSON.stringify(payload));
-    const unsignedToken = `${headerEncoded}.${payloadEncoded}`;
+    // Sign JWT using jsonwebtoken library
+    const token = jwt.sign(payload, privateKey.export({ type: 'pkcs8', format: 'pem' }), {
+      header,
+      algorithm: 'RS256'
+    });
 
-    // Sign the token
-    const signature = crypto.sign('RSA-SHA256', Buffer.from(unsignedToken) as any, privateKey);
-    const signatureEncoded = signature.toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
-    return `${unsignedToken}.${signatureEncoded}`;
-  }
-
-  private base64UrlEncode(str: string): string {
-    return Buffer.from(str)
-      .toString('base64')
-      .replace(/\+/g, '-')
-      .replace(/\//g, '_')
-      .replace(/=/g, '');
+    return token;
   }
 
   protected InitEndpointsMappings(): void {
