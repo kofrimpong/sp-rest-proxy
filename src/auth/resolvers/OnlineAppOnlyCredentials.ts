@@ -1,4 +1,4 @@
-import { IOnlineAappOnlyCredentials } from '../IAuthOptions';
+import { IOnlineAappOnlyCredentials, ITokenResponse } from '../IAuthOptions';
 import { IAuthResponse } from '../IAuthResponse';
 import { OnlineResolver } from './OnlineResolver';
 import { Cache } from '../utils/Cache';
@@ -7,11 +7,6 @@ import { HostingEnvironment } from '../HostingEnvironment';
 import * as crypto from 'crypto';
 import * as fs from 'fs';
 import * as jwt from 'jsonwebtoken';
-
-interface ITokenResponse {
-  access_token: string;
-  expires_in: number;
-}
 
 
 //https://github.com/LucasMarangon/Azure_Oauth_JWT/tree/main
@@ -85,7 +80,7 @@ export class OnlineAppOnlyCredentials extends OnlineResolver {
       params.append('client_id', clientId);
       params.append('client_assertion_type', 'urn:ietf:params:oauth:client-assertion-type:jwt-bearer');
       params.append('client_assertion', jwtToken);
-      params.append('scope', `https://${sharePointHostname}/.default`);
+      params.append('scope', this.buildScopes([], false));
 
       return request.post(tokenUrl, {
         body: params.toString(),

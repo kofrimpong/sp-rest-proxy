@@ -4,12 +4,7 @@ import { Cache } from '../utils/Cache';
 import { request } from '../config';
 import { HostingEnvironment } from '../HostingEnvironment';
 import { exec } from 'child_process';
-
-interface IDeviceCodeOptions {
-  clientId: string;
-  tenantId: string;
-  clientSecret?: string; // Optional: for confidential clients
-}
+import { IDeviceCodeCredentials, ITokenResponse } from '../IAuthOptions';
 
 interface IDeviceCodeResponse {
   device_code: string;
@@ -20,18 +15,11 @@ interface IDeviceCodeResponse {
   message: string;
 }
 
-interface ITokenResponse {
-  access_token: string;
-  refresh_token: string;
-  expires_in: number;
-  token_type: string;
-}
-
 export class DeviceCodeResolver extends OnlineResolver {
 
   private static TokenCache: Cache = new Cache();
 
-  constructor(_siteUrl: string, private _authOptions: IDeviceCodeOptions) {
+  constructor(_siteUrl: string, private _authOptions: IDeviceCodeCredentials) {
     super(_siteUrl);
   }
 
@@ -61,13 +49,12 @@ export class DeviceCodeResolver extends OnlineResolver {
   }
 
   private initiateDeviceCodeFlow(cacheKey: string): Promise<IAuthResponse> {
-    const sharePointHostname = new URL(this._siteUrl).hostname;
     const authEndpoint = this.getAuthEndpoint();
     const tokenUrl = `https://${authEndpoint}/${this._authOptions.tenantId}/oauth2/v2.0/devicecode`;
 
     const params = new URLSearchParams();
     params.append('client_id', this._authOptions.clientId);
-    params.append('scope', `https://${sharePointHostname}/.default offline_access`);
+    params.append('scope', this.buildScopes());
 
     return request.post(tokenUrl, {
       body: params.toString(),
@@ -157,13 +144,12 @@ export class DeviceCodeResolver extends OnlineResolver {
   private refreshAccessToken(refreshToken: string, cacheKey: string): Promise<IAuthResponse> {
     const authEndpoint = this.getAuthEndpoint();
     const tokenUrl = `https://${authEndpoint}/${this._authOptions.tenantId}/oauth2/v2.0/token`;
-    const sharePointHostname = new URL(this._siteUrl).hostname;
 
     const params = new URLSearchParams();
     params.append('grant_type', 'refresh_token');
     params.append('client_id', this._authOptions.clientId);
     params.append('refresh_token', refreshToken);
-    params.append('scope', `https://${sharePointHostname}/.default offline_access`);
+    params.append('scope', this.buildScopes());
 
     if (this._authOptions.clientSecret) {
       params.append('client_secret', this._authOptions.clientSecret);

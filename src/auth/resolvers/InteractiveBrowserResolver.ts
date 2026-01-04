@@ -6,27 +6,14 @@ import { HostingEnvironment } from '../HostingEnvironment';
 import { createHash, randomBytes } from 'crypto';
 import * as http from 'http';
 import { exec } from 'child_process';
-
-interface IInteractiveBrowserOptions {
-  clientId: string;
-  tenantId: string;
-  redirectPort?: number | string; // Port on localhost to listen on (default: 5000)
-  clientSecret?: string; // Optional: for confidential clients
-}
-
-interface ITokenResponse {
-  access_token: string;
-  refresh_token: string;
-  expires_in: number;
-  token_type: string;
-}
+import { IInteractiveBrowserCredentials, ITokenResponse } from '../IAuthOptions';
 
 export class InteractiveBrowserResolver extends OnlineResolver {
 
   private static TokenCache: Cache = new Cache();
   private readonly port: string;
 
-  constructor(_siteUrl: string, private _authOptions: IInteractiveBrowserOptions) {
+  constructor(_siteUrl: string, private _authOptions: IInteractiveBrowserCredentials) {
     super(_siteUrl);
     const portVal = typeof _authOptions.redirectPort !== 'undefined' ? String(_authOptions.redirectPort) : '5000';
     this.port = portVal || '5000';
@@ -65,10 +52,7 @@ export class InteractiveBrowserResolver extends OnlineResolver {
       const codeChallenge = this.generateCodeChallenge(codeVerifier);
       const state = randomBytes(16).toString('hex');
 
-      const sharePointHostname = new URL(this._siteUrl).hostname;
-      // Extract tenant root domain (e.g., tenant.sharepoint.com from tenant.sharepoint.com/sites/sitename)
-      const tenantDomain = sharePointHostname.split('.sharepoint.com')[0] + '.sharepoint.com';
-      const scope = `https://${tenantDomain}/.default offline_access`;
+      const scope = this.buildScopes();
 
       const builtRedirectUri = `http://localhost:${this.port}`;
       const authEndpoint = this.getAuthEndpoint();
@@ -155,8 +139,6 @@ export class InteractiveBrowserResolver extends OnlineResolver {
   private async exchangeCodeForToken(code: string, codeVerifier: string): Promise<ITokenResponse> {
     const authEndpoint = this.getAuthEndpoint();
     const tokenUrl = `https://${authEndpoint}/${this._authOptions.tenantId}/oauth2/v2.0/token`;
-    const sharePointHostname = new URL(this._siteUrl).hostname;
-    const tenantDomain = sharePointHostname.split('.sharepoint.com')[0] + '.sharepoint.com';
 
     const params = new URLSearchParams();
     params.append('grant_type', 'authorization_code');
@@ -165,7 +147,7 @@ export class InteractiveBrowserResolver extends OnlineResolver {
     const builtRedirectUri = `http://localhost:${this.port}`;
     params.append('redirect_uri', builtRedirectUri);
     params.append('code_verifier', codeVerifier);
-    params.append('scope', `https://${tenantDomain}/.default offline_access`);
+    params.append('scope', this.buildScopes());
 
     // Add client_secret if available (for confidential clients)
     if (this._authOptions.clientSecret) {
@@ -189,14 +171,12 @@ export class InteractiveBrowserResolver extends OnlineResolver {
   private refreshAccessToken(refreshToken: string, cacheKey: string): Promise<IAuthResponse> {
     const authEndpoint = this.getAuthEndpoint();
     const tokenUrl = `https://${authEndpoint}/${this._authOptions.tenantId}/oauth2/v2.0/token`;
-    const sharePointHostname = new URL(this._siteUrl).hostname;
-    const tenantDomain = sharePointHostname.split('.sharepoint.com')[0] + '.sharepoint.com';
 
     const params = new URLSearchParams();
     params.append('grant_type', 'refresh_token');
     params.append('client_id', this._authOptions.clientId);
     params.append('refresh_token', refreshToken);
-    params.append('scope', `https://${tenantDomain}/.default offline_access`);
+    params.append('scope', this.buildScopes());
 
     // Add client_secret if available (for confidential clients)
     if (this._authOptions.clientSecret) {
